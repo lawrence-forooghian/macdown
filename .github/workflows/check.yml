@@ -66,6 +66,13 @@ jobs:
       - name: Build a release
         run: bundle exec fastlane build_release
 
+      - name: Store app version numbers in environment
+        run: |
+          short_version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" release/MacDown.app/Contents/Info.plist)
+          echo "MACDOWN_CF_BUNDLE_SHORT_VERSION_STRING=${short_version}" >> $GITHUB_ENV
+          version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" release/MacDown.app/Contents/Info.plist)
+          echo "MACDOWN_CF_BUNDLE_VERSION=${version}" >> $GITHUB_ENV
+
       # The zipping done by the upload-artifact action isn’t sufficient – macOS
       # refused to run the app bundle that I extracted from its zip. I think
       # this is, possibly amongst other reasons, because it doesn’t preserve
@@ -81,5 +88,5 @@ jobs:
       - name: Save release artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: release
+          name: "MacDown ${{ env.MACDOWN_CF_BUNDLE_SHORT_VERSION_STRING }} (${{ env.MACDOWN_CF_BUNDLE_VERSION }})"
           path: release
