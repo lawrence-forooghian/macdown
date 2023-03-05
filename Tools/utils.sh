@@ -1,53 +1,51 @@
-# First, check for git in $PATH
-hash git 2>/dev/null || { echo >&2 "Git required, not installed.  Aborting build number update script."; exit 0; }
-
-# Build version (closest-tag-or-branch "-" commits-since-tag "-" short-hash dirty-flag)
-function get_build_version() {
-    echo $(git describe --tags --always --dirty=+)
-}
-
-# Use the latest tag for short version (expected tag format "vn[.n[.n]]")
-# or if there are no tags, we make up version 0.0.<commit count>
+# TODO I think that for released versions, we will stick to the rules. For unreleased versions, we’ll do our own semantic version thing
 function get_short_version() {
-    LATEST_TAG=$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null) || LATEST_TAG="HEAD"
-    if [ $LATEST_TAG = "HEAD" ]; then
-        COMMIT_COUNT=$(git rev-list --count HEAD)
-        LATEST_TAG="0.0.$COMMIT_COUNT"
-        COMMIT_COUNT_SINCE_TAG=0
+    # CFBundleShortVersionString:
+    #
+    # From https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleshortversionstring:
+    #
+    # > This key is a user-visible string for the version of the bundle. The required format is three period-separated integers, such as 10.14.1. The string can only contain numeric characters (0-9) and periods.
+    # >
+    # > Each integer provides information about the release in the format [Major].[Minor].[Patch]:
+    # >
+    # > Major: A major revision number.
+    # > Minor: A minor revision number.
+    # > Patch: A maintenance release number.
+    # >
+    # > This key is used throughout the system to identify the version of the bundle.
+    #
+    # From https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html#//apple_ref/doc/uid/TP40009249-111349-TPXREF113:
+    #
+    # > CFBundleShortVersionString (String - iOS, macOS) specifies the release version number of the bundle, which identifies a released iteration of the app.
+    # >
+    # > The release version number is a string composed of three period-separated integers. The first integer represents major revision to the app, such as a revision that implements new features or major changes. The second integer denotes a revision that implements less prominent features. The third integer represents a maintenance release revision.
+    # >
+    # > The value for this key differs from the value for CFBundleVersion, which identifies an iteration (released or unreleased) of the app.
+    # >
+    # > This key can be localized by including it in your InfoPlist.strings files.
+
+    local tools_dir=$(dirname "${BASH_SOURCE[0]:-${(%):-%x}}")
+    local next_version=$(cat "$tools_dir/version.txt")
+
+    if [ "$CI" == "true" ]; then
+        # TODO check semantic versioning rules
+        SHORT_VERSION="${next_version}-preview"
     else
-        COMMIT_COUNT_SINCE_TAG=$(git rev-list --count ${LATEST_TAG}..)
-        LATEST_TAG=${LATEST_TAG##v} # Remove the "v" from the front of the tag
+        SHORT_VERSION="${next_version}-dev"
     fi
 
-    if [ $COMMIT_COUNT_SINCE_TAG = 0 ]; then
-        SHORT_VERSION="$LATEST_TAG"
-    else
-        local tools_dir=$(dirname "${BASH_SOURCE[0]:-${(%):-%x}}")
-        local next_version=$(cat "$tools_dir/version.txt")
-        SHORT_VERSION="${next_version}d${COMMIT_COUNT_SINCE_TAG}"
-    fi
     echo $SHORT_VERSION
 }
 
-# Bundle version (commits-on-master[-until-branch "." commits-on-branch])
-# Assumes that two release branches will not diverge from the same commit on master.
 function get_bundle_version() {
-    if [ $(git rev-parse --abbrev-ref HEAD) = "master" ]; then
-        MASTER_COMMIT_COUNT=$(git rev-list --count HEAD)
-        BRANCH_COMMIT_COUNT=0
-        BUNDLE_VERSION="$MASTER_COMMIT_COUNT"
+    if [ "$CI" == "true" ]; then
+        # TODO note about how this breaks the 255-max rule but so did the previous code
+        # GITHUB_RUN_NUMBER: A unique number for each run of a particular workflow in a repository. This number begins at 1 for the workflow's first run, and increments with each new run. This number does not change if you re-run the workflow run. For example, 3.
+        #
+        # GITHUB_RUN_ATTEMPT: A unique number for each attempt of a particular workflow run in a repository. This number begins at 1 for the workflow run's first attempt, and increments with each re-run. For example, 3.
+        BUNDLE_VERSION="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
     else
-        if [ $(git rev-list --count master..) = 0 ]; then   # The branch is attached to master. Just count master.
-            MASTER_COMMIT_COUNT=$(git rev-list --count HEAD)
-        else
-            MASTER_COMMIT_COUNT=$(git rev-list --count $(git rev-list master.. | tail -n 1)^)
-        fi
-        BRANCH_COMMIT_COUNT=$(git rev-list --count master..)
-        if [ $BRANCH_COMMIT_COUNT = 0 ]; then
-            BUNDLE_VERSION="$MASTER_COMMIT_COUNT"
-        else
-            BUNDLE_VERSION="${MASTER_COMMIT_COUNT}.${BRANCH_COMMIT_COUNT}"
-        fi
+        BUNDLE_VERSION=$(date +%s)
     fi
     echo $BUNDLE_VERSION
 }

@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# TODO find out how this works and how to integrate it into build process
+
 pushd `dirname $0` > /dev/null
 source "$(pwd -P)"/utils.sh
 popd > /dev/null
